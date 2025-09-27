@@ -1,188 +1,171 @@
 // ==UserScript==
-// @name         Wplace Overlay Pro (clean)
-// @version      1.0.1
-// @match        https://wplace.live/*
-// @updateURL    https://raw.githubusercontent.com/worhels/place-tools/main/userscripts/overlay.user.js
-// @downloadURL  https://raw.githubusercontent.com/worhels/place-tools/main/userscripts/overlay.user.js
+// @name         KB Toolkit Pro (ingest/search/rules)
+// @version      1.0.0
+// @match        *://*/*
+// @grant        none
 // ==/UserScript==
 
 (()=>{
 
-function waitCanvas(cb){
-  const tick=()=>{ const mc=document.querySelector('canvas.maplibregl-canvas'); mc?cb(mc):requestAnimationFrame(tick); };
-  tick();
+function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!=null)d.innerHTML=html;return d}
+function css(n,s){for(const k in s)n.style[k]=s[k];return n}
+function panel(){
+  const d=el('div'); css(d,{position:'fixed',right:'12px',top:'56px',zIndex:999999,background:'#0f1113',color:'#ddd',padding:'10px',font:'12px/1.4 system-ui',width:'360px',border:'1px solid #222',borderRadius:'8px',boxShadow:'0 2px 12px rgba(0,0,0,.5)'})
+  d.innerHTML=`
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    <b style="font-size:13px">KB Toolkit Pro</b>
+    <span style="flex:1"></span>
+    <button id="kb_close" style="background:#222;border:0;color:#ddd;padding:4px 8px;border-radius:4px">x</button>
+  </div>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <input id="kb_api"  placeholder="http://127.0.0.1:8080" value="http://127.0.0.1:8080" style="flex:1;background:#0b0c0d;color:#ddd;border:1px solid #222;padding:6px;border-radius:6px">
+    <input id="kb_key"  placeholder="dev key" style="width:140px;background:#0b0c0d;color:#ddd;border:1px solid #222;padding:6px;border-radius:6px">
+  </div>
+
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <button id="tab_ing"  style="flex:1;background:#1f2937;border:0;color:#fff;padding:6px;border-radius:6px">Ingest</button>
+    <button id="tab_srch" style="flex:1;background:#111827;border:0;color:#ddd;padding:6px;border-radius:6px">Search</button>
+    <button id="tab_rule" style="flex:1;background:#111827;border:0;color:#ddd;padding:6px;border-radius:6px">Rules</button>
+    <button id="kb_ping"  style="background:#333;border:0;color:#ddd;padding:6px;border-radius:6px">Health</button>
+  </div>
+
+  <div id="view_ing">
+    <input id="kb_file" type="file" style="width:100%;margin-bottom:8px">
+    <div style="display:flex;gap:6px">
+      <button id="kb_send"  style="flex:1;background:#2563eb;border:0;color:#fff;padding:8px;border-radius:6px">Ingest file</button>
+      <button id="kb_sample"style="background:#374151;border:0;color:#ddd;padding:8px;border-radius:6px">Sample JSON</button>
+    </div>
+  </div>
+
+  <div id="view_srch" style="display:none">
+    <input id="q_text" placeholder="query" style="width:100%;margin-bottom:6px;background:#0b0c0d;color:#ddd;border:1px solid #222;padding:6px;border-radius:6px">
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <button id="btn_text"  style="flex:1;background:#374151;border:0;color:#fff;padding:8px;border-radius:6px">Text</button>
+      <button id="btn_vec"   style="flex:1;background:#374151;border:0;color:#fff;padding:8px;border-radius:6px">Vector</button>
+      <button id="btn_hyb"   style="flex:1;background:#2563eb;border:0;color:#fff;padding:8px;border-radius:6px">Hybrid</button>
+    </div>
+    <div id="kb_res" style="max-height:280px;overflow:auto;border:1px solid #222;border-radius:6px;padding:6px;background:#0b0c0d"></div>
+  </div>
+
+  <div id="view_rule" style="display:none">
+    <textarea id="rule_json" placeholder='{"id":"rule-1","q":"keyword","tags":["kb"],"notifyWebhook":""}' style="width:100%;height:120px;background:#0b0c0d;color:#ddd;border:1px solid #222;padding:6px;border-radius:6px"></textarea>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button id="rule_list" style="flex:1;background:#374151;border:0;color:#fff;padding:8px;border-radius:6px">List</button>
+      <button id="rule_add"  style="flex:1;background:#2563eb;border:0;color:#fff;padding:8px;border-radius:6px">Upsert</button>
+      <button id="rule_del"  style="flex:1;background:#7f1d1d;border:0;color:#fff;padding:8px;border-radius:6px">Delete</button>
+    </div>
+    <div id="rule_out" style="margin-top:6px;max-height:160px;overflow:auto;border:1px solid #222;border-radius:6px;padding:6px;background:#0b0c0d"></div>
+  </div>
+
+  <div id="kb_st" style="margin-top:8px;color:#9ca3af">ready</div>
+  `
+  document.body.appendChild(d); return d
 }
 
-waitCanvas(init);
+const ui=panel(); const st=ui.querySelector('#kb_st')
+const api = ()=> ui.querySelector('#kb_api').value.trim() || "http://127.0.0.1:8080"
+const key = ()=> ui.querySelector('#kb_key').value.trim()
 
-function init(mapCanvas){
-  const PALETTE=[[0,0,0],[34,34,34],[85,85,85],[136,136,136],[221,221,221],[255,255,255],[102,0,17],[221,34,34],[255,102,34],[255,153,34],[255,187,34],[255,221,34],[255,255,153],[34,153,85],[34,221,85],[102,255,102],[34,119,136],[34,187,170],[34,102,204],[68,153,255],[68,221,221],[102,34,204],[153,102,255],[170,136,255],[187,34,187],[204,68,153],[221,68,119],[255,102,170],[255,153,187],[85,51,34],[153,102,51],[221,153,85]];
-  function nearest(r,g,b,cache){
-    const k=(r<<16)|(g<<8)|b; if(cache.has(k)) return cache.get(k);
-    let bd=1e12,br=0,bg=0,bb=0;
-    for(const [pr,pg,pb] of PALETTE){
-      const d=(r-pr)*(r-pr)+(g-pg)*(g-pg)+(b-pb)*(b-pb);
-      if(d<bd){bd=d;br=pr;bg=pg;bb=pb}
+function setTab(name){
+  const t1=ui.querySelector('#tab_ing'),t2=ui.querySelector('#tab_srch'),t3=ui.querySelector('#tab_rule')
+  const v1=ui.querySelector('#view_ing'),v2=ui.querySelector('#view_srch'),v3=ui.querySelector('#view_rule')
+  t1.style.background = name==='ing' ? '#1f2937' : '#111827'
+  t2.style.background = name==='srch'? '#1f2937' : '#111827'
+  t3.style.background = name==='rule'? '#1f2937' : '#111827'
+  v1.style.display = name==='ing' ? '' : 'none'
+  v2.style.display = name==='srch'? '' : 'none'
+  v3.style.display = name==='rule'? '' : 'none'
+}
+
+async function req(method, path, body){
+  const r = await fetch(api()+path,{
+    method, headers: {"Content-Type":"application/json","x-dev-key": key()}, body: body?JSON.stringify(body):undefined
+  })
+  if(!r.ok){ throw new Error(await r.text()) }
+  return r.json()
+}
+
+ui.querySelector('#kb_close').onclick=()=>ui.remove()
+
+ui.querySelector('#kb_ping').onclick=async()=>{
+  try{ const r=await fetch(api()+"/health").then(r=>r.json()); st.textContent="health: "+JSON.stringify(r) }catch(e){ st.textContent="health err: "+e.message }
+}
+
+ui.querySelector('#tab_ing').onclick = ()=>setTab('ing')
+ui.querySelector('#tab_srch').onclick= ()=>setTab('srch')
+ui.querySelector('#tab_rule').onclick= ()=>setTab('rule')
+
+ui.querySelector('#kb_sample').onclick=()=>{
+  const blob=new Blob([JSON.stringify([{id:"1",title:"Doc A",text:"пример текста про поиск ботов",tags:["kb"],ts:Math.floor(Date.now()/1000)}],null,2)],{type:"application/json"})
+  const a=el('a',{href:URL.createObjectURL(blob),download:'sample.json'}); document.body.appendChild(a); a.click(); a.remove()
+}
+
+ui.querySelector('#kb_send').onclick=async()=>{
+  const f=ui.querySelector('#kb_file').files[0]; if(!f){ st.textContent="choose file"; return }
+  if(!key()){ st.textContent="set dev key"; return }
+  st.textContent="reading..."
+  let docs=[]
+  try{
+    const txt=await f.text()
+    if(f.name.endsWith(".ndjson")) docs = txt.trim().split(/\r?\n/).map(s=>JSON.parse(s))
+    else if(f.name.endsWith(".json")) docs = JSON.parse(txt)
+    else docs = [{ id:crypto.randomUUID(), text: txt.slice(0,2000) }]
+  }catch(e){ st.textContent="parse err"; return }
+  st.textContent="sending "+docs.length
+  try{
+    const j = await req("POST","/ingest",docs)
+    st.textContent = "ingested: "+JSON.stringify(j)
+  }catch(e){ st.textContent="err: "+e.message }
+}
+
+async function runSearch(endpoint){
+  if(!key()){ st.textContent="set dev key"; return }
+  const q=ui.querySelector('#q_text').value.trim()
+  if(!q){ st.textContent="empty query"; return }
+  st.textContent="searching..."
+  try{
+    const j = await req("POST",endpoint,{ q, limit: 10 })
+    const box = ui.querySelector('#kb_res'); box.innerHTML=""
+    const hits = j.hits||[]
+    if(!hits.length){ box.textContent="ничего нет"; st.textContent="ok"; return }
+    for(const h of hits){
+      const div=el('div'); css(div,{border:'1px solid #222',borderRadius:'6px',padding:'6px',margin:'4px 0',background:'#0b0c0d'})
+      div.innerHTML = `<div style="color:#fff">${(h.title||h.id||"")}</div><div style="color:#9ca3af;font-size:11px">${(h.snippet||"")}</div>`
+      box.appendChild(div)
     }
-    const v=[br,bg,bb]; cache.set(k,v); return v;
-  }
+    st.textContent="ok"
+  }catch(e){ st.textContent="err: "+e.message }
+}
 
-  function panelUI(){
-    const d=document.createElement('div');
-    Object.assign(d.style,{position:'fixed',right:'12px',top:'56px',zIndex:999999,background:'#0f1113',color:'#ddd',padding:'8px',font:'12px/1.4 system-ui',width:'340px',border:'1px solid #222',borderRadius:'6px'});
-    d.innerHTML=`
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-        <b style="flex:1">Wplace Overlay</b>
-        <button id="ovx" style="background:#222;border:0;color:#ddd;padding:4px 8px;border-radius:4px">x</button>
-      </div>
-      <input id="ovf" type="file" accept="image/*,.csv" style="width:100%;margin-bottom:6px">
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input id="ovw" type="number" value="64" style="flex:1;background:#0b0c0d;color:#ddd;border:1px solid #222;padding:4px;border-radius:4px">
-        <input id="ovh" type="number" value="64" style="flex:1;background:#0b0c0d;color:#ddd;border:1px solid #222;padding:4px;border-radius:4px">
-      </div>
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input id="ovs"  type="number" value="4"  style="flex:1;background:#0b0c0d;color:#ddd;border:1px solid #222;padding:4px;border-radius:4px">
-        <input id="ovox" type="number" value="0"  style="flex:1;background:#0b0c0d;color:#ddd;border:1px solid #222;padding:4px;border-radius:4px">
-        <input id="ovoy" type="number" value="0"  style="flex:1;background:#0b0c0d;color:#ddd;border:1px solid #222;padding:4px;border-radius:4px">
-      </div>
-      <div style="display:flex;gap:6px">
-        <button id="ovpick"   style="flex:1;padding:6px;border-radius:4px;background:#444;border:0;color:#fff">Pick</button>
-        <button id="ovrender" style="flex:1;padding:6px;border-radius:4px;background:#0b63ff;border:0;color:#fff">Render</button>
-        <button id="ovclear"  style="flex:1;padding:6px;border-radius:4px;background:#333;border:0;color:#ddd">Clear</button>
-        <button id="ovtoggle" style="padding:6px;border-radius:4px;background:#333;border:0;color:#ddd">Hide</button>
-      </div>
-      <div id="ovst" style="margin-top:8px;color:#999;font-size:11px">ready</div>`;
-    document.body.appendChild(d);
-    return d;
-  }
+ui.querySelector('#btn_text').onclick = ()=>runSearch("/search_text")
+ui.querySelector('#btn_vec').onclick  = ()=>runSearch("/search_vec")
+ui.querySelector('#btn_hyb').onclick  = ()=>runSearch("/search_hybrid")
 
-  const panel=panelUI();
-  panel.querySelector('#ovx').onclick=()=>panel.remove();
+ui.querySelector('#rule_list').onclick=async()=>{
+  if(!key()){ st.textContent="set dev key"; return }
+  try{ const j=await req("GET","/rules"); ui.querySelector('#rule_out').textContent=JSON.stringify(j,null,2); st.textContent="ok" }catch(e){ st.textContent="err: "+e.message }
+}
 
-  const C=document.createElement('canvas');
-  Object.assign(C.style,{position:'absolute',left:0,top:0,zIndex:99998,pointerEvents:'none'});
-  mapCanvas.parentElement.appendChild(C);
-  const ctx=C.getContext('2d');
+ui.querySelector('#rule_add').onclick=async()=>{
+  if(!key()){ st.textContent="set dev key"; return }
+  let obj; try{ obj = JSON.parse(ui.querySelector('#rule_json').value||"{}") }catch(e){ st.textContent="bad json"; return }
+  try{
+    const j = await req("POST","/rules",obj)
+    ui.querySelector('#rule_out').textContent=JSON.stringify(j,null,2)
+    st.textContent="ok"
+  }catch(e){ st.textContent="err: "+e.message }
+}
 
-  function syncSize(){
-    C.style.width =(mapCanvas.style.width  || mapCanvas.width +'px');
-    C.style.height=(mapCanvas.style.height || mapCanvas.height+'px');
-    C.width  =(mapCanvas.width  || mapCanvas.clientWidth );
-    C.height =(mapCanvas.height || mapCanvas.clientHeight);
-  }
-  function syncTransform(){
-    const st=getComputedStyle(mapCanvas);
-    C.style.transform=st.transform;
-    C.style.transformOrigin=st.transformOrigin;
-  }
-  new ResizeObserver(syncSize).observe(mapCanvas);
-  new MutationObserver(syncTransform).observe(mapCanvas,{attributes:true,attributeFilter:['style','class']});
-  syncSize(); syncTransform();
-
-  let data=null, iw=0, ih=0, visible=true;
-  const st=panel.querySelector('#ovst');
-
-  function quantize(img,w,h){
-    const off=document.createElement('canvas'); off.width=w; off.height=h;
-    const ict=off.getContext('2d',{willReadFrequently:true});
-    ict.imageSmoothingEnabled=false; ict.drawImage(img,0,0,w,h);
-    const d=ict.getImageData(0,0,w,h).data, out=new Array(w*h), cache=new Map();
-    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
-      const i=(y*w+x)*4, a=d[i+3]; let r=255,g=255,b=255;
-      if(a>=40){ [r,g,b]=nearest(d[i],d[i+1],d[i+2],cache); }
-      out[y*w+x]=[r,g,b];
-    }
-    return out;
-  }
-
-  function draw(arr,w,h,scale,ox,oy){
-    ctx.clearRect(0,0,C.width,C.height);
-    if(!visible || !arr) return;
-    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
-      const [r,g,b]=arr[y*w+x]; const px=ox+x*scale, py=oy+y*scale;
-      ctx.fillStyle=`rgba(${r},${g},${b},.95)`; ctx.fillRect(px,py,scale,scale);
-      ctx.strokeStyle='rgba(0,0,0,.2)'; ctx.strokeRect(px,py,scale,scale);
-    }
-  }
-
-  function save(){ localStorage.setItem('ovCfg',JSON.stringify({s:+S.value,ox:+OX.value,oy:+OY.value,w:+W.value,h:+H.value})); }
-  function load(){
-    try{
-      const o=JSON.parse(localStorage.getItem('ovCfg')||'{}');
-      if(o.s) S.value=o.s; if(o.ox!=null) OX.value=o.ox; if(o.oy!=null) OY.value=o.oy;
-      if(o.w) W.value=o.w; if(o.h) H.value=o.h;
-    }catch{}
-  }
-
-  const F = panel.querySelector('#ovf'),
-        W = panel.querySelector('#ovw'),
-        H = panel.querySelector('#ovh'),
-        S = panel.querySelector('#ovs'),
-        OX= panel.querySelector('#ovox'),
-        OY= panel.querySelector('#ovoy');
-
-  load();
-
-  let pick=false;
-  document.addEventListener('click',e=>{
-    if(!pick) return;
-    pick=false;
-    OX.value=e.clientX; OY.value=e.clientY;
-    st.textContent=`origin ${e.clientX},${e.clientY}`; save();
-  },{capture:true});
-
-  panel.querySelector('#ovpick').onclick = ()=>{ pick=true; st.textContent='click on map'; };
-  panel.querySelector('#ovtoggle').onclick= ()=>{ visible=!visible; panel.querySelector('#ovtoggle').textContent=visible?'Hide':'Show'; draw(data,iw,ih,+S.value,+OX.value,+OY.value); };
-  panel.querySelector('#ovclear').onclick  = ()=>{ ctx.clearRect(0,0,C.width,C.height); data=null; st.textContent='cleared'; };
-  panel.querySelector('#ovrender').onclick = ()=>{ if(!data){ st.textContent='no data'; return; } save(); draw(data,iw,ih,+S.value,+OX.value,+OY.value); };
-
-  F.onchange=e=>{
-    const f=e.target.files[0]; if(!f) return;
-    if((f.type||'').startsWith('image/')){
-      const r=new FileReader();
-      r.onload=ev=>{
-        const img=new Image();
-        img.onload=()=>{
-          iw=parseInt(W.value||img.width,10);
-          ih=parseInt(H.value||img.height,10);
-          data=quantize(img,iw,ih);
-          st.textContent=`img ${img.width}x${img.height} -> ${iw}x${ih}`;
-        };
-        img.src=ev.target.result;
-      };
-      r.readAsDataURL(f);
-    }else{
-      const r=new FileReader();
-      r.onload=ev=>{
-        const txt=ev.target.result.trim();
-        const lines=txt.split(/\r?\n/).slice(1);
-        const rows=[];
-        for(const l of lines){
-          const [x,y,r,g,b]=l.split(',').map(s=>+s.trim());
-          rows[y]??=[]; rows[y][x]=[r,g,b];
-        }
-        iw=+W.value||rows[0].length; ih=+H.value||rows.length;
-        data=new Array(iw*ih);
-        for(let y=0;y<ih;y++) for(let x=0;x<iw;x++) data[y*iw+x]=rows?.[y]?.[x]||[255,255,255];
-        st.textContent='csv loaded';
-      };
-      r.readAsText(f);
-    }
-  };
-
-  document.addEventListener('keydown',e=>{
-    const step=e.shiftKey?10:1;
-    let s=+S.value, ox=+OX.value, oy=+OY.value;
-    if(e.key==='ArrowLeft')      ox-=step;
-    else if(e.key==='ArrowRight')ox+=step;
-    else if(e.key==='ArrowUp')   oy-=step;
-    else if(e.key==='ArrowDown') oy+=step;
-    else if(e.key==='+')         s+=1;
-    else if(e.key==='-')         s=Math.max(1,s-1);
-    else if(e.key.toLowerCase()==='v'){ visible=!visible; panel.querySelector('#ovtoggle').textContent=visible?'Hide':'Show'; }
-    else return;
-    S.value=s; OX.value=ox; OY.value=oy; save(); draw(data,iw,ih,s,ox,oy);
-  });
+ui.querySelector('#rule_del').onclick=async()=>{
+  if(!key()){ st.textContent="set dev key"; return }
+  let obj; try{ obj = JSON.parse(ui.querySelector('#rule_json').value||"{}") }catch(e){ st.textContent="bad json"; return }
+  if(!obj.id){ st.textContent="need id"; return }
+  try{
+    const j = await fetch(api()+"/rules/"+encodeURIComponent(obj.id),{ method:"DELETE", headers:{ "x-dev-key": key() } })
+    if(!j.ok) throw new Error(await j.text())
+    ui.querySelector('#rule_out').textContent="deleted: "+obj.id
+    st.textContent="ok"
+  }catch(e){ st.textContent="err: "+e.message }
 }
 
 })();
