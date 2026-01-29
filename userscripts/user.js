@@ -1,12 +1,3 @@
-// ==UserScript==
-// @name         KB Toolkit Pro (ingest/search/rules)
-// @version      1.0.0
-// @match        *://*/*
-// @grant        none
-// ==/UserScript==
-
-(()=>{
-
 function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!=null)d.innerHTML=html;return d}
 function css(n,s){for(const k in s)n.style[k]=s[k];return n}
 function panel(){
@@ -96,7 +87,7 @@ ui.querySelector('#tab_srch').onclick= ()=>setTab('srch')
 ui.querySelector('#tab_rule').onclick= ()=>setTab('rule')
 
 ui.querySelector('#kb_sample').onclick=()=>{
-  const blob=new Blob([JSON.stringify([{id:"1",title:"Doc A",text:"пример текста про поиск ботов",tags:["kb"],ts:Math.floor(Date.now()/1000)}],null,2)],{type:"application/json"})
+  const blob=new Blob([JSON.stringify([{id:"1",title:"Doc A",text:"поиск ботов",tags:["kb"],ts:Math.floor(Date.now()/1000)}],null,2)],{type:"application/json"})
   const a=el('a',{href:URL.createObjectURL(blob),download:'sample.json'}); document.body.appendChild(a); a.click(); a.remove()
 }
 
